@@ -1,0 +1,7 @@
+knowledge/knowledge/
+knowledge/models/
+
+*.log
+__pycache__/
+.venv/
+.env
