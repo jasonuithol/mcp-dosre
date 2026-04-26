@@ -31,10 +31,15 @@ when `~/Projects/mcp-dosre/start-containers.sh` is present.
 ## Quick start
 
 ```bash
-service/build-container.sh
-knowledge/build-container.sh
+./setup.sh              # one-time, idempotent (builds both images)
 ./start-containers.sh
 ./stop-containers.sh    # when done
+```
+
+To validate setup works from bare state:
+
+```bash
+./clean.sh && ./setup.sh && ./start-containers.sh
 ```
 
 ## Design notes

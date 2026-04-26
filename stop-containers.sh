@@ -4,7 +4,7 @@
 # Default: SIGTERM with grace period (docker stop).
 # --kill:  SIGKILL immediately (docker kill). Container is left in place
 #          either way so the next start-containers.sh can revive it. For
-#          full removal, use ./clean-containers.sh.
+#          full removal, use ./clean.sh.
 set -euo pipefail
 
 FORCE=false
