@@ -6,7 +6,7 @@ Binary-analysis tools for DOS-era reverse engineering. Runs inside a Docker
 container; exposes hex / strings / magic / disassembly / md5 / stat / note
 to Claude Code over HTTP.
 
-Register with Claude Code (run this inside the claude-pygame container):
+Register with Claude Code (run this inside the claude-sandbox-core container):
     claude mcp add dos-re --transport http http://localhost:5175/mcp
 
 All file reads are confined to PROJECTS_DIR (read-only bind of ~/Projects).

@@ -1,6 +1,6 @@
 FROM python:3.12-slim-bookworm
 
-LABEL maintainer="claude-dosre"
+LABEL maintainer="mcp-dosre"
 LABEL description="DOS-era binary reverse-engineering tools MCP server"
 
 # Binary-analysis tool chest. strings + od come from coreutils/binutils in the
