@@ -24,9 +24,12 @@ endpoint.
 ## Consumers
 
 This is a service-pack only — it does not launch Claude. Any MCP client
-speaking streamable HTTP can mount these services. Currently picked up
-opportunistically by [`claude-pygame`](../claude-pygame/)'s `start.sh`
-when `~/Projects/mcp-dosre/start.sh` is present.
+speaking streamable HTTP can mount these services. Picked up
+opportunistically by
+[`claude-sandbox-core`](https://github.com/jasonuithol/claude-sandbox-core)'s
+`pygame` domain (listed under `OPTIONAL_REPOS` / `OPTIONAL_SERVICES` in
+`domains/pygame.conf`) — if this repo is cloned alongside `mcp-pygame`,
+the dos-re services start automatically and register inside the sandbox.
 
 ## Quick start
 
