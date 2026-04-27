@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# start-containers.sh — spin up the dos-re MCP services.
+# start.sh — spin up the dos-re MCP services.
 # Service pack only; does not launch Claude.
 set -euo pipefail
 
@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # "go run X first".
 "$SCRIPT_DIR/setup.sh"
 
-# Each inner start-container.sh revives a stopped container if one exists,
+# Each inner start-container.sh (in service/ and knowledge/) revives a stopped container if one exists,
 # or creates a fresh one otherwise — so calling them repeatedly is safe.
 # Use ./clean.sh if you need to force a clean rebuild.
 echo "Starting mcp-dos-re..."

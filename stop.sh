@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# stop-containers.sh — shut down the dos-re MCP services.
+# stop.sh — shut down the dos-re MCP services.
 #
 # Default: SIGTERM with grace period (docker stop).
 # --kill:  SIGKILL immediately (docker kill). Container is left in place
-#          either way so the next start-containers.sh can revive it. For
+#          either way so the next start.sh can revive it. For
 #          full removal, use ./clean.sh.
 set -euo pipefail
 

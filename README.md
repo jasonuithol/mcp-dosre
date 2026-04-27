@@ -26,20 +26,20 @@ endpoint.
 This is a service-pack only — it does not launch Claude. Any MCP client
 speaking streamable HTTP can mount these services. Currently picked up
 opportunistically by [`claude-pygame`](../claude-pygame/)'s `start.sh`
-when `~/Projects/mcp-dosre/start-containers.sh` is present.
+when `~/Projects/mcp-dosre/start.sh` is present.
 
 ## Quick start
 
 ```bash
 ./setup.sh              # one-time, idempotent (builds both images)
-./start-containers.sh
-./stop-containers.sh    # when done
+./start.sh
+./stop.sh               # when done
 ```
 
 To validate setup works from bare state:
 
 ```bash
-./clean.sh && ./setup.sh && ./start-containers.sh
+./clean.sh && ./setup.sh && ./start.sh
 ```
 
 ## Design notes
