@@ -2,14 +2,18 @@
 
 Selective triggers — this is the key design decision:
 
-  disassemble  -> indexed (md5+offset+length+bits keyed; regeneration is slow)
-  identify     -> upserted one-per-md5 (cheap cache)
-  note         -> always indexed (the high-signal path)
+  identify       -> upserted one-per-md5 (cheap cache)
+  disassemble    -> indexed (md5+offset+length+bits keyed; regeneration is slow)
+  note           -> always indexed (the high-signal path)
+  find_strings   -> upserted one-per-md5 (game text — searchable across files)
+  text_view      -> indexed per region; only when a non-trivial encoding decoded
+  objdump_info   -> upserted one-per-md5 (PE structural overview)
+  objdump_headers-> upserted one-per-md5 (PE section headers)
+  objdump_disasm -> upserted one-per-md5 (PE code disassembly)
   everything else -> skipped
 
-hex_dump / hex_view_colored / find_strings / slice_bytes / md5 / stat are
-skipped because they're cheap to regenerate and would flood the index with
-noise.
+hex_dump / hex_view_colored / slice_bytes / md5 / stat are skipped because
+they're cheap to regenerate and produce no semantically retrievable text.
 """
 
 from __future__ import annotations
@@ -23,6 +27,11 @@ from .chunker import (
     chunk_disassembly,
     chunk_identify,
     chunk_note,
+    chunk_pe_disasm,
+    chunk_pe_info,
+    chunk_pe_sections,
+    chunk_strings,
+    chunk_text_view,
     upsert_chunks,
 )
 
@@ -34,7 +43,6 @@ logger = logging.getLogger("mcp-dos-re-knowledge.router")
 SKIP_TOOLS = {
     "hex_dump",
     "hex_view_colored",
-    "find_strings",
     "slice_bytes",
     "md5",
     "stat",
@@ -106,6 +114,84 @@ class DosreIngestRouter(IngestRouter):
             )
             self._index_chunks([chunk])
             return {"action": "indexed_note", "chunks": 1}
+
+        if tool == "find_strings":
+            if not success:
+                return {"action": "skipped_strings_failed", "chunks": 0}
+            md5 = args.get("md5", "") or ""
+            if not md5:
+                return {"action": "skipped_strings_no_md5", "chunks": 0}
+            chunk = chunk_strings(
+                md5=md5,
+                filename=args.get("filename", ""),
+                min_length=int(args.get("min_length", 4)),
+                body=result,
+            )
+            self._index_chunks([chunk])
+            return {"action": "indexed_strings", "chunks": 1}
+
+        if tool == "text_view":
+            if not success:
+                return {"action": "skipped_text_view_failed", "chunks": 0}
+            md5 = args.get("md5", "") or ""
+            if not md5:
+                return {"action": "skipped_text_view_no_md5", "chunks": 0}
+            encoding = args.get("encoding", "") or ""
+            # Plain ASCII slices duplicate find_strings content — skip.
+            if encoding == "plain":
+                return {"action": "skipped_text_view_plain", "chunks": 0}
+            chunk = chunk_text_view(
+                md5=md5,
+                filename=args.get("filename", ""),
+                offset=int(args.get("offset", 0)),
+                length=int(args.get("length", 0)),
+                encoding=encoding,
+                body=result,
+            )
+            self._index_chunks([chunk])
+            return {"action": "indexed_text_view", "chunks": 1}
+
+        if tool == "objdump_info":
+            if not success:
+                return {"action": "skipped_pe_info_failed", "chunks": 0}
+            md5 = args.get("md5", "") or ""
+            if not md5:
+                return {"action": "skipped_pe_info_no_md5", "chunks": 0}
+            chunk = chunk_pe_info(
+                md5=md5,
+                filename=args.get("filename", ""),
+                body=result,
+            )
+            self._index_chunks([chunk])
+            return {"action": "indexed_pe_info", "chunks": 1}
+
+        if tool == "objdump_headers":
+            if not success:
+                return {"action": "skipped_pe_sections_failed", "chunks": 0}
+            md5 = args.get("md5", "") or ""
+            if not md5:
+                return {"action": "skipped_pe_sections_no_md5", "chunks": 0}
+            chunk = chunk_pe_sections(
+                md5=md5,
+                filename=args.get("filename", ""),
+                body=result,
+            )
+            self._index_chunks([chunk])
+            return {"action": "indexed_pe_sections", "chunks": 1}
+
+        if tool == "objdump_disasm":
+            if not success:
+                return {"action": "skipped_pe_disasm_failed", "chunks": 0}
+            md5 = args.get("md5", "") or ""
+            if not md5:
+                return {"action": "skipped_pe_disasm_no_md5", "chunks": 0}
+            chunk = chunk_pe_disasm(
+                md5=md5,
+                filename=args.get("filename", ""),
+                body=result,
+            )
+            self._index_chunks([chunk])
+            return {"action": "indexed_pe_disasm", "chunks": 1}
 
         logger.debug("Unhandled tool: %s", tool)
         return {"action": "skipped_unknown", "chunks": 0}

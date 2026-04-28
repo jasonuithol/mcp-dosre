@@ -106,8 +106,10 @@ mcp = FastMCP(
         "you clearly that it couldn't decode. "
         "Use hex_dump for structure inspection, disassemble for .OVL / .EXE "
         "code, identify + find_strings for first contact with an unknown "
-        "blob. Call note(...) to persist a finding to the knowledge base "
-        "keyed by md5+offset."
+        "blob. For late-DOS / early-Windows PE binaries prefer objdump_info / "
+        "objdump_headers / objdump_disasm — they parse the file format and "
+        "surface imports / sections directly. Call note(...) to persist a "
+        "finding to the knowledge base keyed by md5+offset."
     ),
 )
 
@@ -194,14 +196,40 @@ async def identify(path: str) -> str:
 
 @mcp.tool()
 async def find_strings(path: str, min_length: int = 4) -> str:
-    """Extract printable strings via `strings -n MIN`."""
+    """Extract printable strings via `strings -n MIN`.
+
+    Result is indexed in the knowledge base keyed by md5 so embedded
+    text (filenames, dialogue, version banners) becomes searchable
+    across files. Re-running with a different min_length upserts.
+    """
     try:
         p = _resolve_path(path)
     except Exception as e:
-        return f"FAILED\n\n{e}"
+        result = f"FAILED\n\n{e}"
+        _report("find_strings", {"path": path, "min_length": min_length}, result, False)
+        return result
 
     ok, out = await _run_async(["strings", "-n", str(min_length), str(p)])
-    return out if ok else f"FAILED\n\n{out}"
+    result = out if ok else f"FAILED\n\n{out}"
+
+    md5_hex = ""
+    try:
+        md5_hex = _md5_of(p)
+    except Exception:
+        pass
+
+    _report(
+        "find_strings",
+        {
+            "path": str(p),
+            "filename": p.name,
+            "md5": md5_hex,
+            "min_length": min_length,
+        },
+        result,
+        ok,
+    )
+    return result
 
 
 # ── text_view ─────────────────────────────────────────────────────────────────
@@ -282,6 +310,7 @@ async def text_view(path: str, offset: int = 0, length: int = 1024) -> str:
             "If you know the encoding, say so and I'll decode it. "
             "Otherwise inspect with hex_dump to eyeball structure.",
         ]
+        # Don't ingest the "couldn't decode" diagnostic — no retrieval value.
         return "\n".join(lines)
 
     header = (
@@ -289,7 +318,28 @@ async def text_view(path: str, offset: int = 0, length: int = 1024) -> str:
         f"CONFIDENCE: {best_score:.2f} printable ratio "
         f"(range {offset}..{offset + len(data)})\n\n"
     )
-    return header + _render_bytes(best_buf)
+    rendered = header + _render_bytes(best_buf)
+
+    md5_hex = ""
+    try:
+        md5_hex = _md5_of(p)
+    except Exception:
+        pass
+
+    _report(
+        "text_view",
+        {
+            "path": str(p),
+            "filename": p.name,
+            "md5": md5_hex,
+            "offset": offset,
+            "length": len(data),
+            "encoding": _encoding_slug(best_name),
+        },
+        rendered,
+        True,
+    )
+    return rendered
 
 
 # ── disassemble ───────────────────────────────────────────────────────────────
@@ -367,6 +417,114 @@ async def disassemble(
             "length": length,
             "md5": md5_hex,
         },
+        result,
+        ok,
+    )
+    return result
+
+
+# ── objdump (PE/COFF analysis) ────────────────────────────────────────────────
+
+@mcp.tool()
+async def objdump_info(path: str) -> str:
+    """objdump -p — PE/COFF structural overview: format, headers, imports, exports.
+
+    Use for late-DOS / early-Windows PE binaries. On a pure DOS MZ
+    file objdump emits "file format not recognized" — use `disassemble`
+    + `identify` for those. Result is indexed in the knowledge base
+    keyed by md5 (one chunk per file, upserts on rerun).
+    """
+    try:
+        p = _resolve_path(path)
+    except Exception as e:
+        result = f"FAILED\n\n{e}"
+        _report("objdump_info", {"path": path}, result, False)
+        return result
+
+    ok, out = await _run_async(["objdump", "-p", str(p)])
+    result = out if ok else f"FAILED\n\n{out}"
+
+    md5_hex = ""
+    try:
+        md5_hex = _md5_of(p)
+    except Exception:
+        pass
+
+    _report(
+        "objdump_info",
+        {"path": str(p), "filename": p.name, "md5": md5_hex},
+        result,
+        ok,
+    )
+    return result
+
+
+@mcp.tool()
+async def objdump_headers(path: str) -> str:
+    """objdump -h — section headers (name, size, file offset, virtual address).
+
+    Result is indexed in the knowledge base keyed by md5.
+    """
+    try:
+        p = _resolve_path(path)
+    except Exception as e:
+        result = f"FAILED\n\n{e}"
+        _report("objdump_headers", {"path": path}, result, False)
+        return result
+
+    ok, out = await _run_async(["objdump", "-h", str(p)])
+    result = out if ok else f"FAILED\n\n{out}"
+
+    md5_hex = ""
+    try:
+        md5_hex = _md5_of(p)
+    except Exception:
+        pass
+
+    _report(
+        "objdump_headers",
+        {"path": str(p), "filename": p.name, "md5": md5_hex},
+        result,
+        ok,
+    )
+    return result
+
+
+@mcp.tool()
+async def objdump_disasm(path: str, intel: bool = True) -> str:
+    """objdump -d — disassemble code sections of a PE/COFF binary.
+
+    Prefer this over `disassemble` for late-DOS / early-Windows PE
+    binaries — objdump knows the file layout and disassembles only
+    executable sections. For pure DOS MZ / .OVL / .COM use `disassemble`
+    (ndisasm) instead. Intel syntax by default; pass intel=False for AT&T.
+
+    Result is indexed in the knowledge base keyed by md5.
+    """
+    try:
+        p = _resolve_path(path)
+    except Exception as e:
+        result = f"FAILED\n\n{e}"
+        _report("objdump_disasm", {"path": path, "intel": intel}, result, False)
+        return result
+
+    cmd = ["objdump", "-d"]
+    if intel:
+        cmd.extend(["-M", "intel"])
+    cmd.append(str(p))
+
+    ok, out = await _run_async(cmd)
+    result = out if ok else f"FAILED\n\n{out}"
+
+    md5_hex = ""
+    try:
+        md5_hex = _md5_of(p)
+    except Exception:
+        pass
+
+    _report(
+        "objdump_disasm",
+        {"path": str(p), "filename": p.name, "md5": md5_hex, "intel": intel},
         result,
         ok,
     )
@@ -506,6 +664,17 @@ def _printable_ratio(data: bytes) -> float:
     if not data:
         return 0.0
     return sum(1 for b in data if b in _PRINTABLE_OK) / len(data)
+
+
+def _encoding_slug(name: str) -> str:
+    """Compact slug for a detected text_view encoding (used in metadata + tags)."""
+    if name == "plain":
+        return "plain"
+    if name.startswith("high-bit-stripped"):
+        return "high-bit-stripped"
+    if name.startswith("XOR"):
+        return "xor-0x80"
+    return name
 
 
 def _render_bytes(data: bytes) -> str:

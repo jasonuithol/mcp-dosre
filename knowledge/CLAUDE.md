@@ -21,21 +21,26 @@ The `filename` field is carried too, but as a hint, not an identifier.
 
 Router is in `ingest/router.py`. The rules:
 
-| Tool               | Action                             |
-|--------------------|------------------------------------|
-| `identify`         | Upsert one chunk per md5           |
-| `disassemble`      | Index per (md5, offset, length, bits) |
-| `note`             | Always index (the high-signal path) |
-| `hex_dump`         | **skip** (regenerable, noisy)      |
-| `hex_view_colored` | **skip**                           |
-| `find_strings`     | **skip**                           |
-| `slice_bytes`      | **skip**                           |
-| `md5`              | **skip**                           |
-| `stat`             | **skip**                           |
+| Tool               | Action                                                    |
+|--------------------|-----------------------------------------------------------|
+| `identify`         | Upsert one chunk per md5                                  |
+| `disassemble`      | Index per (md5, offset, length, bits)                     |
+| `note`             | Always index (the high-signal path)                       |
+| `find_strings`     | Upsert one chunk per md5 (game text, cross-file searchable)|
+| `text_view`        | Index per (md5, offset, length); skipped for plain ASCII (covered by find_strings) |
+| `objdump_info`     | Upsert one chunk per md5 (PE structural overview)         |
+| `objdump_headers`  | Upsert one chunk per md5 (PE section headers)             |
+| `objdump_disasm`   | Upsert one chunk per md5 (PE code disassembly)            |
+| `hex_dump`         | **skip** (raw bytes, no retrievable text)                 |
+| `hex_view_colored` | **skip**                                                  |
+| `slice_bytes`      | **skip** (opaque base64)                                  |
+| `md5`              | **skip**                                                  |
+| `stat`             | **skip**                                                  |
 
-The skipped tools are cheap to regenerate and would flood the index with
-commodity output. The kept tools either cost real time (disassembly) or
-carry human judgment (notes, which are the whole point of the service).
+The skipped tools produce no semantically retrievable text. Kept tools
+either cost real time (disassembly), carry human judgment (notes), or
+contain searchable content the user might want to query later
+(strings, decoded text, PE structural info).
 
 ---
 
@@ -48,6 +53,16 @@ disassembly  id = "disassembly/{md5}/{bits}/{offset}/{length}"
              ↳ repeating the same region overwrites; different region = new
 note         id = "note/{md5}/{offset}/{length}/{timestamp}"
              ↳ accumulates; two notes on the same region both kept
+strings      id = "strings/{md5}"
+             ↳ one per md5; upserts on repeat
+text_view    id = "text_view/{md5}/{offset}/{length}"
+             ↳ repeating the same region overwrites; different region = new
+pe-info      id = "pe-info/{md5}"
+             ↳ one per md5; upserts on repeat
+pe-sections  id = "pe-sections/{md5}"
+             ↳ one per md5; upserts on repeat
+pe-disasm    id = "pe-disasm/{md5}"
+             ↳ one per md5; upserts on repeat
 ```
 
 ---
@@ -57,12 +72,14 @@ note         id = "note/{md5}/{offset}/{length}/{timestamp}"
 ```python
 {
     "source":      "note/d41d8cd98f00b204e9800998ecf8427e",   # prefix + md5
-    "kind":        "note",        # identify | disassembly | note
+    "kind":        "note",        # identify | disassembly | note | strings |
+                                  # text_view | pe-info | pe-sections | pe-disasm
     "md5":         "d41d8cd98f00b204e9800998ecf8427e",
     "filename":    "CASTLE.NPC",  # hint, not identity
     "offset":      0x90,
     "length":      144,
     "bits":        0,             # 16 / 32 / 64 for disassembly, 0 otherwise
+    "encoding":    "",            # text_view chunks only: plain | high-bit-stripped | xor-0x80
     "tags":        "note,npc-record,u5,schedule",
     "indexed_at":  "2026-04-23T09:15:00Z",
     # Plus per-tag boolean keys (tag_note, tag_npc_record, ...) for filtering.
@@ -112,7 +129,7 @@ mcp-dos-re-knowledge/
 ├── reset-knowledge.sh     ← wipe ChromaDB and restart
 ├── mcp-service.py         ← FastMCP + /ingest endpoint
 ├── ingest/
-│   ├── chunker.py         ← md5-keyed chunk builders (identify/disassembly/note)
+│   ├── chunker.py         ← md5-keyed chunk builders (8 kinds: identify, disassembly, note, strings, text_view, pe-info, pe-sections, pe-disasm)
 │   └── router.py          ← selective ingest routing
 ├── models/                ← embedding model (symlink to sibling if available)
 └── knowledge/             ← ChromaDB persistent storage (gitignored)
@@ -156,6 +173,8 @@ grows linearly with corpus size. Not worth building until someone wants it.
 
 - No symbol recovery, no CFG reconstruction, no function boundary analysis.
   Those are Ghidra's job.
-- No PE / ELF header parsing. Out of scope for "hand-rolled DOS formats."
+- No deep ELF / Mach-O analysis. PE/COFF is supported via objdump because
+  late-DOS / early-Windows games sit on that boundary; other formats are
+  out of scope.
 - No embedding model fine-tuning. Pure retrieval against the stock
   `all-MiniLM-L6-v2`.

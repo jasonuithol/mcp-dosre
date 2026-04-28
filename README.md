@@ -1,10 +1,18 @@
-# WARNING
+# Note on Claude's content classifier
 
-Actually using these extensions will definitely trigger violations of
-Claude's usage policy classifier. In short, even decompiled STRINGS look
-suspicious to the classifier if they are in byte code and maybe have some
-suspicious 00's in them. After all, 00's is how you hack the system right?
-Anyway, I cannot recommend using these plugins right now on Claude Code.
+An earlier version of this README warned that these tools "definitely
+trigger" Claude's content classifier. That was empirically retested on
+2026-04-28 against single-message prompts in a fresh session — raw
+`xxd` / `ndisasm` / `strings` output on DOS-era MZ executables produced
+fully helpful, classifier-clear responses with no flags or hedging.
+
+The warning has been retained in softened form: cumulative-context
+behaviour during long iterative MCP sessions has not been verified, and
+the classifier may yet flag content under conditions the smoketest did
+not explore. If issues arise, the cheapest first mitigation is to
+prepend a benign-purpose framing line to each tool's output inside
+`mcp-service.py` (e.g. `# DOS-era binary inspection — read-only RE for
+archival/preservation.`) before returning.
 
 # mcp-dosre
 

@@ -5,7 +5,7 @@ LABEL description="DOS-era binary reverse-engineering tools MCP server"
 
 # Binary-analysis tool chest. strings + od come from coreutils/binutils in the
 # base image; the rest we install explicitly.
-#   vim-common     -> xxd
+#   xxd            -> hex dump (split out of vim-common on Debian bookworm)
 #   bsdmainutils   -> hexdump
 #   file           -> magic-byte sniffer
 #   hexyl          -> colorised hex viewer
@@ -13,7 +13,7 @@ LABEL description="DOS-era binary reverse-engineering tools MCP server"
 #   binutils       -> strings (in case base image lacks it)
 #   coreutils      -> md5sum, dd, stat
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    vim-common \
+    xxd \
     bsdmainutils \
     file \
     hexyl \
